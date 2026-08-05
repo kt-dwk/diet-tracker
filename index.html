@@ -737,11 +737,11 @@ function newFoodFormHtml(prefillName) {
       <div class="row">
         <div class="field">
           <label for="nf-kcal">Calories</label>
-          <input type="number" inputmode="decimal" id="nf-kcal" required min="0" step="1">
+          <input type="number" inputmode="decimal" id="nf-kcal" min="0" step="1">
         </div>
         <div class="field">
           <label for="nf-protein">Protein (g)</label>
-          <input type="number" inputmode="decimal" id="nf-protein" required min="0" step="1">
+          <input type="number" inputmode="decimal" id="nf-protein" min="0" step="1">
         </div>
       </div>
       <div class="field">
@@ -766,7 +766,6 @@ function renderToday() {
   const entries = state.days[date] || [];
   const s = state.settings;
   const results = todayView.query.trim() ? searchFoods(state, todayView.query).slice(0, 6) : [];
-  const weightEntry = state.measurements.find((m) => m.date === date);
 
   document.getElementById('today-root').innerHTML = `
     <div class="date-nav">
@@ -794,14 +793,6 @@ function renderToday() {
       ${todayView.showNewFoodForm
         ? newFoodFormHtml(todayView.query)
         : '<button type="button" class="link-btn" data-act="show-new-food-form">+ Add new food</button>'}
-    </div>
-
-    <div class="card">
-      <div class="card-title">Weight</div>
-      <form id="quick-weight-form" class="row">
-        <input type="number" inputmode="decimal" step="0.1" min="0" id="quick-weight-input" placeholder="kg" value="${weightEntry && weightEntry.weight != null ? weightEntry.weight : ''}">
-        <button type="submit" class="btn btn-primary">Save</button>
-      </form>
     </div>
   `;
 }
@@ -877,13 +868,6 @@ todayRoot.addEventListener('submit', (e) => {
     save(state);
     todayView.query = '';
     todayView.showNewFoodForm = false;
-    renderToday();
-  } else if (e.target.id === 'quick-weight-form') {
-    const raw = document.getElementById('quick-weight-input').value;
-    const weight = Number(raw);
-    if (raw === '' || Number.isNaN(weight)) return;
-    upsertMeasurement(state, { date, weight });
-    save(state);
     renderToday();
   }
 });
