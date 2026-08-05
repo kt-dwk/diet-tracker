@@ -388,11 +388,14 @@
 const STORAGE_KEY = 'dietTracker.v1';
 const CURRENT_VERSION = 1;
 
-// Bumped by one on every deployed change, independent of CURRENT_VERSION
-// above (that's the data schema version, unrelated). Lets a change be
-// referred to as "Build N" in conversation and in building-log.md,
-// rather than by date or description alone. Shown in the Plan tab footer.
-const BUILD_NUMBER = 7;
+// Format MAJOR.MINOR (e.g. "1.0"), independent of CURRENT_VERSION above
+// (that's the data schema version, unrelated). MINOR increments for a
+// regular change (1.1, 1.2, ...); MAJOR increments — resetting MINOR
+// back to 0 — only for a significant change (2.0, 3.0, ...). Lets a
+// change be referred to as "Build X.Y" in conversation and in
+// building-log.md. Shown in the Plan tab footer. This scheme starts at
+// 1.0 here, superseding the earlier plain-integer numbering (Builds 1-7).
+const BUILD_NUMBER = '1.0';
 const BUILD_DATE = '2026-08-05';
 
 const MILESTONES = [
