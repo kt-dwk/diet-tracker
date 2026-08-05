@@ -142,7 +142,11 @@
     color: var(--text);
     border-radius: 10px;
     padding: 10px 12px;
-    font-size: 15px;
+    /* 16px, not 15px: iOS Safari auto-zooms the whole page on focus for
+       any form control under 16px. This is the standard fix — disabling
+       zoom via the viewport meta tag instead would also block legitimate
+       pinch-to-zoom, which is an accessibility regression, not a fix. */
+    font-size: 16px;
     min-height: 44px;
     width: 100%;
   }
@@ -401,7 +405,7 @@ const CURRENT_VERSION = 1;
 // change be referred to as "Build X.Y" in conversation and in
 // building-log.md. Shown in the Plan tab footer. This scheme starts at
 // 1.0 here, superseding the earlier plain-integer numbering (Builds 1-7).
-const BUILD_NUMBER = '1.1';
+const BUILD_NUMBER = '1.2';
 const BUILD_DATE = '2026-08-05';
 
 // Icon set from design_handoff_app_icons/README.md (style "2b — Blue
