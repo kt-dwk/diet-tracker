@@ -115,7 +115,7 @@
     padding: 6px 4px;
     cursor: pointer;
   }
-  .tab-btn .tab-icon { font-size: 20px; line-height: 1; }
+  .tab-btn .tab-icon { font-size: 20px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
   .tab-btn.is-active { color: var(--accent); font-weight: 600; }
 
   /* ---- Shared components (cards, forms, buttons) ---- */
@@ -258,16 +258,22 @@
     font-size: 16px;
     cursor: pointer;
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   .edit-btn {
     width: 44px; height: 44px;
     border-radius: 8px;
     border: none;
     background: none;
-    color: var(--accent);
+    color: var(--text);
     font-size: 16px;
     cursor: pointer;
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   /* ---- Today: food search ---- */
@@ -369,13 +375,13 @@
 
   <nav class="tabbar">
     <button type="button" class="tab-btn is-active" data-act="switch-tab" data-tab="today">
-      <span class="tab-icon">🍽️</span><span>Today</span>
+      <span class="tab-icon" data-tab-icon="today"></span><span>Today</span>
     </button>
     <button type="button" class="tab-btn" data-act="switch-tab" data-tab="progress">
-      <span class="tab-icon">📈</span><span>Progress</span>
+      <span class="tab-icon" data-tab-icon="progress"></span><span>Progress</span>
     </button>
     <button type="button" class="tab-btn" data-act="switch-tab" data-tab="plan">
-      <span class="tab-icon">📋</span><span>Plan</span>
+      <span class="tab-icon" data-tab-icon="plan"></span><span>Plan</span>
     </button>
   </nav>
 </div>
@@ -395,8 +401,29 @@ const CURRENT_VERSION = 1;
 // change be referred to as "Build X.Y" in conversation and in
 // building-log.md. Shown in the Plan tab footer. This scheme starts at
 // 1.0 here, superseding the earlier plain-integer numbering (Builds 1-7).
-const BUILD_NUMBER = '1.0';
+const BUILD_NUMBER = '1.1';
 const BUILD_DATE = '2026-08-05';
+
+// Icon set from design_handoff_app_icons/README.md (style "2b — Blue
+// accent, no badge"). stroke="currentColor" so each icon inherits its
+// parent element's CSS color — the existing .edit-btn/.del-btn/.tab-btn
+// rules already tint accent/muted/danger correctly per state, so no
+// separate colored SVG variants are needed. width/height: 1em scales
+// with the parent's font-size, so existing button dimensions (already
+// verified at the 44px tap-target minimum) don't need to change.
+// Defined this early (before any usage, including the static tab-bar
+// injection below) since `const` is not hoisted the way `function`
+// declarations are — using one before its declaration line runs throws,
+// even within the same synchronous script.
+function iconSvg(pathsHtml) {
+  return `<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${pathsHtml}</svg>`;
+}
+
+const ICON_EDIT = iconSvg('<path d="M15.5 4.5l4 4L8 20H4v-4L15.5 4.5z" stroke-linejoin="round"/><path d="M13 6.5l4 4"/>');
+const ICON_DELETE = iconSvg('<path d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M7 7l1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13"/><path d="M10 11v6M14 11v6"/>');
+const ICON_TODAY = iconSvg('<ellipse cx="8" cy="6" rx="2.6" ry="3.4"/><path d="M8 9.4V21"/><path d="M16 3v6M18 3v6M16 6c0 1.6.9 3 2 3s2-1.4 2-3M17 9v12"/>');
+const ICON_PROGRESS = iconSvg('<path d="M4 19l5-6 4 3 7-9"/><path d="M16 6h4v4"/>');
+const ICON_PLAN = iconSvg('<path d="M6 3h9l3 3v15a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" stroke-linejoin="round"/><path d="M9 10h6M9 14h6M9 18h4"/>');
 
 const MILESTONES = [
   { label: 'Milestone 1', weeks: '4–6',   weight: 57, waistMin: 82, waistMax: 83 },
@@ -723,6 +750,13 @@ document.querySelector('.tabbar').addEventListener('click', (e) => {
   switchTab(btn.dataset.tab);
 });
 
+// Tab bar icons are static HTML (outside any JS template), so they're
+// populated once here from the same ICON_* constants everything else
+// uses, rather than duplicating the SVG markup as inline HTML.
+document.querySelector('[data-tab-icon="today"]').innerHTML = ICON_TODAY;
+document.querySelector('[data-tab-icon="progress"]').innerHTML = ICON_PROGRESS;
+document.querySelector('[data-tab-icon="plan"]').innerHTML = ICON_PLAN;
+
 /* ---------- Today tab ---------- */
 
 let todayView = { date: todayISO(), query: '', showNewFoodForm: false, editingEntryId: null };
@@ -779,8 +813,8 @@ function entryRowHtml(entry) {
         <button type="button" class="qty-btn" data-act="dec-servings" data-id="${entry.id}" aria-label="Decrease servings">–</button>
         <span class="qty-value">${entry.servings}×</span>
         <button type="button" class="qty-btn" data-act="inc-servings" data-id="${entry.id}" aria-label="Increase servings">+</button>
-        <button type="button" class="edit-btn" data-act="edit-entry" data-id="${entry.id}" aria-label="Edit entry">✏️</button>
-        <button type="button" class="del-btn" data-act="delete-entry" data-id="${entry.id}" aria-label="Delete entry">🗑</button>
+        <button type="button" class="edit-btn" data-act="edit-entry" data-id="${entry.id}" aria-label="Edit entry">${ICON_EDIT}</button>
+        <button type="button" class="del-btn" data-act="delete-entry" data-id="${entry.id}" aria-label="Delete entry">${ICON_DELETE}</button>
       </div>
     </div>`;
 }
@@ -1170,8 +1204,8 @@ function measurementsTableHtml(measurements) {
         <div class="ms-date">${escapeHtml(fmtDay(m.date))}</div>
         <div class="ms-vals">${m.weight != null ? m.weight + ' kg' : '—'} · ${m.waist != null ? m.waist + ' cm' : '—'}</div>
         <div class="ms-actions">
-          <button type="button" class="edit-btn" data-act="edit-measurement" data-date="${m.date}" aria-label="Edit measurement">✏️</button>
-          <button type="button" class="del-btn" data-act="delete-measurement" data-date="${m.date}" aria-label="Delete measurement">🗑</button>
+          <button type="button" class="edit-btn" data-act="edit-measurement" data-date="${m.date}" aria-label="Edit measurement">${ICON_EDIT}</button>
+          <button type="button" class="del-btn" data-act="delete-measurement" data-date="${m.date}" aria-label="Delete measurement">${ICON_DELETE}</button>
         </div>
       </div>`)
     .join('');
@@ -1382,7 +1416,7 @@ function foodItemHtml(food) {
         <div class="fi-name">${escapeHtml(food.name)}</div>
         <div class="fi-sub">${food.kcal} kcal · ${food.protein} g${food.servingLabel ? ' · ' + escapeHtml(food.servingLabel) : ''} · used ${food.useCount}×</div>
       </div>
-      <button type="button" class="del-btn" data-act="delete-food" data-id="${food.id}" aria-label="Delete food">🗑</button>
+      <button type="button" class="del-btn" data-act="delete-food" data-id="${food.id}" aria-label="Delete food">${ICON_DELETE}</button>
     </div>`;
 }
 
