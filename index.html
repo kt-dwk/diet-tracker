@@ -222,6 +222,8 @@
     border-bottom: 1px solid var(--border);
   }
   .entry-row:last-child { border-bottom: none; }
+  .entry-edit-form { padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .entry-edit-form:last-child { border-bottom: none; }
   .entry-main { flex: 1 1 auto; min-width: 0; }
   .entry-name { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .entry-sub { font-size: 12px; color: var(--text-dim); }
@@ -243,6 +245,16 @@
     border: none;
     background: none;
     color: var(--danger);
+    font-size: 16px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .edit-btn {
+    width: 44px; height: 44px;
+    border-radius: 8px;
+    border: none;
+    background: none;
+    color: var(--accent);
     font-size: 16px;
     cursor: pointer;
     flex-shrink: 0;
@@ -490,6 +502,17 @@ function updateServings(state, date, entryId, servings) {
   return state;
 }
 
+// Edits only this logged entry's snapshot. Never touches the saved food
+// it came from, even if it has a foodId — mirrors the existing rule that
+// editing a saved food later never rewrites history; this is the reverse
+// of that same principle.
+function updateEntry(state, date, entryId, updates) {
+  const list = state.days[date] || [];
+  const row = list.find((e) => e.id === entryId);
+  if (row) Object.assign(row, updates);
+  return state;
+}
+
 function deleteEntry(state, date, entryId) {
   if (!state.days[date]) return state;
   state.days[date] = state.days[date].filter((e) => e.id !== entryId);
@@ -642,7 +665,7 @@ if (typeof module !== 'undefined' && module.exports) {
     STORAGE_KEY, CURRENT_VERSION, MILESTONES,
     todayISO, shiftISO, daysBetween, fmtDay, genId,
     seedDefaults, migrate, load, save,
-    dayTotals, addEntry, updateServings, deleteEntry,
+    dayTotals, addEntry, updateServings, updateEntry, deleteEntry,
     upsertFood, touchFoodUsage, searchFoods, deleteFood,
     upsertMeasurement, deleteMeasurement, rollingAverage, weeklyRate, projectGoalDate,
     exportData, importData,
@@ -673,7 +696,7 @@ document.querySelector('.tabbar').addEventListener('click', (e) => {
 
 /* ---------- Today tab ---------- */
 
-let todayView = { date: todayISO(), query: '', showNewFoodForm: false };
+let todayView = { date: todayISO(), query: '', showNewFoodForm: false, editingEntryId: null };
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({
@@ -702,6 +725,8 @@ function meterHtml(name, value, min, max, unit, overIsOk) {
 }
 
 function entryRowHtml(entry) {
+  if (entry.id === todayView.editingEntryId) return editEntryFormHtml(entry);
+
   const kcal = Math.round(entry.kcal * entry.servings);
   const protein = Math.round(entry.protein * entry.servings);
   return `
@@ -714,9 +739,37 @@ function entryRowHtml(entry) {
         <button type="button" class="qty-btn" data-act="dec-servings" data-id="${entry.id}" aria-label="Decrease servings">–</button>
         <span class="qty-value">${entry.servings}×</span>
         <button type="button" class="qty-btn" data-act="inc-servings" data-id="${entry.id}" aria-label="Increase servings">+</button>
+        <button type="button" class="edit-btn" data-act="edit-entry" data-id="${entry.id}" aria-label="Edit entry">✏️</button>
         <button type="button" class="del-btn" data-act="delete-entry" data-id="${entry.id}" aria-label="Delete entry">🗑</button>
       </div>
     </div>`;
+}
+
+// Edits only this logged entry's snapshot (kcal/protein are per serving,
+// same as the new-food form) — servings stays untouched here since it
+// already has its own +/- controls on the row.
+function editEntryFormHtml(entry) {
+  return `
+    <form id="edit-entry-form" class="entry-edit-form" data-entry-id="${entry.id}">
+      <div class="field">
+        <label for="ee-name">Name</label>
+        <input type="text" id="ee-name" required autocomplete="off" value="${escapeHtml(entry.name)}">
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="ee-kcal">Calories</label>
+          <input type="number" inputmode="decimal" id="ee-kcal" min="0" step="1" value="${entry.kcal}">
+        </div>
+        <div class="field">
+          <label for="ee-protein">Protein (g)</label>
+          <input type="number" inputmode="decimal" id="ee-protein" min="0" step="1" value="${entry.protein}">
+        </div>
+      </div>
+      <div class="row">
+        <button type="button" class="btn" data-act="cancel-edit-entry">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>`;
 }
 
 function foodResultHtml(food) {
@@ -820,6 +873,7 @@ todayRoot.addEventListener('click', (e) => {
     renderToday();
   } else if (act === 'delete-entry') {
     deleteEntry(state, date, btn.dataset.id);
+    if (todayView.editingEntryId === btn.dataset.id) todayView.editingEntryId = null;
     save(state);
     renderToday();
   } else if (act === 'add-food-result') {
@@ -832,10 +886,18 @@ todayRoot.addEventListener('click', (e) => {
     renderToday();
   } else if (act === 'show-new-food-form') {
     todayView.showNewFoodForm = true;
+    todayView.editingEntryId = null;
     renderToday();
     document.getElementById('nf-name')?.focus();
   } else if (act === 'cancel-new-food') {
     todayView.showNewFoodForm = false;
+    renderToday();
+  } else if (act === 'edit-entry') {
+    todayView.editingEntryId = btn.dataset.id;
+    todayView.showNewFoodForm = false;
+    renderToday();
+  } else if (act === 'cancel-edit-entry') {
+    todayView.editingEntryId = null;
     renderToday();
   }
 });
@@ -868,6 +930,16 @@ todayRoot.addEventListener('submit', (e) => {
     save(state);
     todayView.query = '';
     todayView.showNewFoodForm = false;
+    renderToday();
+  } else if (e.target.id === 'edit-entry-form') {
+    const entryId = e.target.dataset.entryId;
+    const name = document.getElementById('ee-name').value.trim();
+    const kcal = Number(document.getElementById('ee-kcal').value);
+    const protein = Number(document.getElementById('ee-protein').value);
+    if (!name || Number.isNaN(kcal) || Number.isNaN(protein)) return;
+    updateEntry(state, date, entryId, { name, kcal, protein });
+    save(state);
+    todayView.editingEntryId = null;
     renderToday();
   }
 });
