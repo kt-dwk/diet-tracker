@@ -337,6 +337,7 @@
   .status-msg.error { background: var(--danger-soft); color: var(--danger); }
   .btn-block + .btn-block { margin-top: 8px; }
   .hint-text { font-size: 12px; color: var(--text-dim); margin: 0 0 8px; }
+  .build-info { text-align: center; font-size: 11px; color: var(--text-dim); opacity: 0.7; margin: 4px 0 8px; }
 
   .plan-doc h3 { font-size: 14px; margin: 18px 0 6px; }
   .plan-doc h3:first-child { margin-top: 0; }
@@ -386,6 +387,13 @@
 
 const STORAGE_KEY = 'dietTracker.v1';
 const CURRENT_VERSION = 1;
+
+// Bumped by one on every deployed change, independent of CURRENT_VERSION
+// above (that's the data schema version, unrelated). Lets a change be
+// referred to as "Build N" in conversation and in building-log.md,
+// rather than by date or description alone. Shown in the Plan tab footer.
+const BUILD_NUMBER = 7;
+const BUILD_DATE = '2026-08-05';
 
 const MILESTONES = [
   { label: 'Milestone 1', weeks: '4–6',   weight: 57, waistMin: 82, waistMax: 83 },
@@ -1457,6 +1465,8 @@ function renderPlan() {
       <div class="field"><input type="text" id="clear-confirm-input" placeholder="Type DELETE" autocomplete="off"></div>
       <button type="button" class="btn btn-danger btn-block" id="clear-btn" data-act="clear-data" disabled>Clear all data</button>
     </div>
+
+    <p class="build-info">Build ${BUILD_NUMBER} · ${escapeHtml(fmtDay(BUILD_DATE))}</p>
   `;
 }
 
