@@ -291,21 +291,29 @@
   .stat-value { font-size: 16px; font-weight: 700; }
   .stat-label { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
 
-  /* ---- Progress: milestones ---- */
-  .milestone-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
-  .milestone-row:last-child { border-bottom: none; }
-  .milestone-check { font-size: 18px; flex-shrink: 0; }
-  .milestone-label { font-weight: 600; font-size: 14px; }
-  .milestone-weeks { font-weight: 400; color: var(--text-dim); font-size: 12px; }
-  .milestone-target { font-size: 12px; color: var(--text-dim); }
-  .milestone-row.is-done .milestone-label { color: var(--ok); }
-
   /* ---- Progress: measurements table ---- */
   .ms-row { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--border); }
   .ms-row:last-child { border-bottom: none; }
   .ms-date { width: 78px; flex-shrink: 0; font-size: 13px; font-weight: 600; }
   .ms-vals { flex: 1 1 auto; font-size: 13px; color: var(--text-dim); }
   .ms-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+  .field input.invalid { border-color: var(--danger); background: var(--danger-soft); }
+
+  /* ---- Progress: range toggle ---- */
+  .range-toggle { display: flex; margin-bottom: 10px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .range-toggle button {
+    flex: 1 1 0;
+    min-height: 36px;
+    border: none;
+    background: var(--bg);
+    color: var(--text-dim);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border-right: 1px solid var(--border);
+  }
+  .range-toggle button:last-child { border-right: none; }
+  .range-toggle button.is-active { background: var(--accent); color: #fff; }
 
   /* ---- Plan & Settings ---- */
   .foods-list { max-height: 320px; overflow-y: auto; }
@@ -704,6 +712,17 @@ function escapeHtml(s) {
   }[c]));
 }
 
+// Accepts either a period or comma as the decimal separator. Numeric
+// fields are plain text inputs (not type="number") specifically so a
+// comma can even be typed — many locales show a comma on the decimal
+// keypad, but a native type="number" input silently rejects it per the
+// HTML spec, which only allows a period regardless of locale. Blank
+// still parses to 0, matching Number('') — fields that are meant to be
+// optional rely on that.
+function parseNum(raw) {
+  return Number(String(raw).trim().replace(',', '.'));
+}
+
 // `overIsOk`: for protein, exceeding the target isn't a problem (extra
 // protein is harmless), so "over" still reads as the ok state. For
 // calories it stays a caution, same visual weight as being under.
@@ -758,11 +777,11 @@ function editEntryFormHtml(entry) {
       <div class="row">
         <div class="field">
           <label for="ee-kcal">Calories</label>
-          <input type="number" inputmode="decimal" id="ee-kcal" min="0" step="1" value="${entry.kcal}">
+          <input type="text" inputmode="decimal" id="ee-kcal" value="${entry.kcal}">
         </div>
         <div class="field">
           <label for="ee-protein">Protein (g)</label>
-          <input type="number" inputmode="decimal" id="ee-protein" min="0" step="1" value="${entry.protein}">
+          <input type="text" inputmode="decimal" id="ee-protein" value="${entry.protein}">
         </div>
       </div>
       <div class="row">
@@ -790,11 +809,11 @@ function newFoodFormHtml(prefillName) {
       <div class="row">
         <div class="field">
           <label for="nf-kcal">Calories</label>
-          <input type="number" inputmode="decimal" id="nf-kcal" min="0" step="1">
+          <input type="text" inputmode="decimal" id="nf-kcal">
         </div>
         <div class="field">
           <label for="nf-protein">Protein (g)</label>
-          <input type="number" inputmode="decimal" id="nf-protein" min="0" step="1">
+          <input type="text" inputmode="decimal" id="nf-protein">
         </div>
       </div>
       <div class="field">
@@ -917,8 +936,8 @@ todayRoot.addEventListener('submit', (e) => {
 
   if (e.target.id === 'new-food-form') {
     const name = document.getElementById('nf-name').value.trim();
-    const kcal = Number(document.getElementById('nf-kcal').value);
-    const protein = Number(document.getElementById('nf-protein').value);
+    const kcal = parseNum(document.getElementById('nf-kcal').value);
+    const protein = parseNum(document.getElementById('nf-protein').value);
     const servingLabel = document.getElementById('nf-serving').value.trim();
     const saveToLibrary = document.getElementById('nf-save').checked;
     if (!name || Number.isNaN(kcal) || Number.isNaN(protein)) return;
@@ -934,8 +953,8 @@ todayRoot.addEventListener('submit', (e) => {
   } else if (e.target.id === 'edit-entry-form') {
     const entryId = e.target.dataset.entryId;
     const name = document.getElementById('ee-name').value.trim();
-    const kcal = Number(document.getElementById('ee-kcal').value);
-    const protein = Number(document.getElementById('ee-protein').value);
+    const kcal = parseNum(document.getElementById('ee-kcal').value);
+    const protein = parseNum(document.getElementById('ee-protein').value);
     if (!name || Number.isNaN(kcal) || Number.isNaN(protein)) return;
     updateEntry(state, date, entryId, { name, kcal, protein });
     save(state);
@@ -948,7 +967,53 @@ renderToday();
 
 /* ---------- Progress tab ---------- */
 
-let progressView = { editingDate: null };
+let progressView = { editingDate: null, weightRange: '7d', waistRange: '7d', calorieRange: '7d' };
+
+// Exact week multiples, not calendar months, so the calorie chart's
+// weekly bucketing lines up cleanly and all three charts agree on what
+// "1 month" / "6 months" means.
+function rangeDays(key) {
+  return { '7d': 7, '1m': 28, '6m': 182 }[key];
+}
+
+function rangeLabel(key) {
+  return { '7d': '7 days', '1m': '4 weeks', '6m': '6 months' }[key];
+}
+
+function rangeToggleHtml(target, current, options) {
+  const labels = { '7d': '7D', '1m': '1M', '6m': '6M' };
+  return `
+    <div class="range-toggle">
+      ${options.map((key) => `
+        <button type="button" class="${key === current ? 'is-active' : ''}" data-act="set-range" data-target="${target}" data-range="${key}">${labels[key]}</button>
+      `).join('')}
+    </div>`;
+}
+
+// Filters measurements to a trailing window ending today, for whichever
+// chart's range selector this is. The stat row and "7-day avg" figures
+// deliberately do NOT use this — they keep their own fixed windows
+// regardless of chart zoom, so switching to "6M" doesn't change what the
+// rate/projection numbers mean.
+function filterByRange(measurements, rangeKey) {
+  const cutoff = shiftISO(todayISO(), -rangeDays(rangeKey));
+  return measurements.filter((m) => m.date >= cutoff);
+}
+
+// Shared by the Weight and Waist charts. Distinguishes "no measurements
+// logged yet at all" from "you have history, just none in this window" —
+// the latter only became possible once charts started defaulting to a
+// 7-day window instead of always showing everything ever logged.
+function buildLineChartOrMessage(measurements, field, range, chartOptions) {
+  const hasAnyHistory = measurements.some((m) => m[field] != null);
+  const filtered = filterByRange(measurements, range);
+  const points = filtered.filter((m) => m[field] != null).map((m) => ({ date: m.date, value: m[field] }));
+  if (points.length === 0 && hasAnyHistory) {
+    return `<p class="placeholder">No measurements in the last ${rangeLabel(range)} — try a wider range.</p>`;
+  }
+  const avgPoints = rollingAverage(filtered, field, 7);
+  return svgLineChart({ points, avgPoints, ...chartOptions });
+}
 
 function fmtSigned(n, decimals) {
   const v = Math.abs(n).toFixed(decimals);
@@ -1074,17 +1139,6 @@ function statRowHtml(latestAvg, startWeight, goalWeight, rate, projDate) {
     </div>`;
 }
 
-function milestoneRowHtml(m, done) {
-  return `
-    <div class="milestone-row ${done ? 'is-done' : ''}">
-      <div class="milestone-check">${done ? '✅' : '⬜'}</div>
-      <div class="milestone-info">
-        <div class="milestone-label">${escapeHtml(m.label)} <span class="milestone-weeks">· weeks ${m.weeks}</span></div>
-        <div class="milestone-target">${m.weight} kg · waist ${m.waistMin}–${m.waistMax} cm</div>
-      </div>
-    </div>`;
-}
-
 function measurementsTableHtml(measurements) {
   if (!measurements.length) return '<p class="placeholder">No measurements logged yet.</p>';
   const rows = measurements
@@ -1093,9 +1147,9 @@ function measurementsTableHtml(measurements) {
     .map((m) => `
       <div class="ms-row">
         <div class="ms-date">${escapeHtml(fmtDay(m.date))}</div>
-        <div class="ms-vals">${m.weight != null ? m.weight + ' kg' : '—'} · ${m.waist != null ? m.waist + ' cm' : '—'} · ${m.hips != null ? m.hips + ' cm' : '—'}</div>
+        <div class="ms-vals">${m.weight != null ? m.weight + ' kg' : '—'} · ${m.waist != null ? m.waist + ' cm' : '—'}</div>
         <div class="ms-actions">
-          <button type="button" class="link-btn" data-act="edit-measurement" data-date="${m.date}">Edit</button>
+          <button type="button" class="edit-btn" data-act="edit-measurement" data-date="${m.date}" aria-label="Edit measurement">✏️</button>
           <button type="button" class="del-btn" data-act="delete-measurement" data-date="${m.date}" aria-label="Delete measurement">🗑</button>
         </div>
       </div>`)
@@ -1115,15 +1169,11 @@ function measurementFormHtml(editingDate) {
       <div class="row">
         <div class="field">
           <label for="ms-weight">Weight (kg)</label>
-          <input type="number" inputmode="decimal" step="0.1" id="ms-weight" value="${m && m.weight != null ? m.weight : ''}">
+          <input type="text" inputmode="decimal" id="ms-weight" value="${m && m.weight != null ? m.weight : ''}">
         </div>
         <div class="field">
           <label for="ms-waist">Waist (cm)</label>
-          <input type="number" inputmode="decimal" step="0.1" id="ms-waist" value="${m && m.waist != null ? m.waist : ''}">
-        </div>
-        <div class="field">
-          <label for="ms-hips">Hips (cm)</label>
-          <input type="number" inputmode="decimal" step="0.1" id="ms-hips" value="${m && m.hips != null ? m.hips : ''}">
+          <input type="text" inputmode="decimal" id="ms-waist" value="${m && m.waist != null ? m.waist : ''}">
         </div>
       </div>
       <div class="row">
@@ -1135,11 +1185,7 @@ function measurementFormHtml(editingDate) {
 
 function renderProgress() {
   const s = state.settings;
-
-  const weightPoints = state.measurements.filter((m) => m.weight != null).map((m) => ({ date: m.date, value: m.weight }));
-  const weightAvg = rollingAverage(state.measurements, 'weight', 7);
-  const waistPoints = state.measurements.filter((m) => m.waist != null).map((m) => ({ date: m.date, value: m.waist }));
-  const waistAvg = rollingAverage(state.measurements, 'waist', 7);
+  const today = todayISO();
 
   // Exclude the "Goal" milestone from the guide lines — it's already
   // drawn as the main goal line/band, so including it too would just
@@ -1147,46 +1193,72 @@ function renderProgress() {
   const weightGuides = MILESTONES.slice(0, -1).map((m) => ({ value: m.weight, label: m.label }));
   const waistGuides = MILESTONES.slice(0, -1).map((m) => ({ value: (m.waistMin + m.waistMax) / 2, label: m.label }));
 
-  const weightChart = svgLineChart({ points: weightPoints, avgPoints: weightAvg, goalMin: s.goalWeight, guides: weightGuides, decimals: 1 });
-  const waistChart = svgLineChart({ points: waistPoints, avgPoints: waistAvg, goalMin: s.goalWaistMin, goalMax: s.goalWaistMax, guides: waistGuides, decimals: 1 });
+  const weightChart = buildLineChartOrMessage(state.measurements, 'weight', progressView.weightRange, {
+    goalMin: s.goalWeight, guides: weightGuides, decimals: 1,
+  });
+  const waistChart = buildLineChartOrMessage(state.measurements, 'waist', progressView.waistRange, {
+    goalMin: s.goalWaistMin, goalMax: s.goalWaistMax, guides: waistGuides, decimals: 1,
+  });
 
-  const latestAvg = weightAvg.length ? weightAvg[weightAvg.length - 1].value : null;
+  // Stats deliberately use the FULL history, not the chart's selected
+  // range — the rate/projection maths already has its own fixed ~28-day
+  // window from Phase 5, which shouldn't change just because the chart
+  // above is zoomed to 6 months.
+  const fullWeightAvg = rollingAverage(state.measurements, 'weight', 7);
+  const latestAvg = fullWeightAvg.length ? fullWeightAvg[fullWeightAvg.length - 1].value : null;
   const rate = weeklyRate(state.measurements, 'weight');
   const projDate = projectGoalDate(state.measurements, s.goalWeight);
   const stats = statRowHtml(latestAvg, s.startWeight, s.goalWeight, rate, projDate);
 
-  const milestoneRows = MILESTONES.map((m) => milestoneRowHtml(m, latestAvg != null && latestAvg <= m.weight)).join('');
-
-  const today = todayISO();
-  const days14 = [];
-  for (let i = 13; i >= 0; i--) {
-    const d = shiftISO(today, -i);
-    days14.push({ date: d, ...dayTotals(state, d) });
+  // Calories: 7d = one bar per day; 1m = one bar per week, averaged
+  // across all 7 days in that week (including zero-logged days — an off
+  // day is a real part of that week's average, not something to hide).
+  let calBuckets;
+  if (progressView.calorieRange === '1m') {
+    calBuckets = [];
+    for (let w = 3; w >= 0; w--) {
+      const weekStart = shiftISO(today, -(w * 7 + 6));
+      let kcalSum = 0, proteinSum = 0;
+      for (let d = 0; d < 7; d++) {
+        const t = dayTotals(state, shiftISO(weekStart, d));
+        kcalSum += t.kcal;
+        proteinSum += t.protein;
+      }
+      calBuckets.push({ date: weekStart, kcal: Math.round(kcalSum / 7), protein: Math.round(proteinSum / 7) });
+    }
+  } else {
+    calBuckets = [];
+    for (let i = 6; i >= 0; i--) {
+      calBuckets.push({ date: shiftISO(today, -i), ...dayTotals(state, shiftISO(today, -i)) });
+    }
   }
-  const last7 = days14.slice(7);
+  const calChart = calorieBarChartSvg(calBuckets, s.kcalMin, s.kcalMax);
+
+  // The "7-day avg" figures below the chart stay fixed to the real last
+  // 7 calendar days regardless of calorieRange, same independence
+  // principle as the weight stats above.
+  const last7 = [];
+  for (let i = 6; i >= 0; i--) last7.push(dayTotals(state, shiftISO(today, -i)));
   const avgKcal7 = last7.reduce((a, d) => a + d.kcal, 0) / 7;
   const avgProtein7 = last7.reduce((a, d) => a + d.protein, 0) / 7;
-  const calChart = calorieBarChartSvg(days14, s.kcalMin, s.kcalMax);
 
   document.getElementById('progress-root').innerHTML = `
     <div class="card">
       <div class="card-title">Weight</div>
+      ${rangeToggleHtml('weight', progressView.weightRange, ['7d', '1m', '6m'])}
       ${weightChart}
       ${stats}
     </div>
 
     <div class="card">
       <div class="card-title">Waist</div>
+      ${rangeToggleHtml('waist', progressView.waistRange, ['7d', '1m', '6m'])}
       ${waistChart}
     </div>
 
     <div class="card">
-      <div class="card-title">Milestones</div>
-      ${milestoneRows}
-    </div>
-
-    <div class="card">
-      <div class="card-title">Calories — last 14 days</div>
+      <div class="card-title">Calories — last ${rangeLabel(progressView.calorieRange)}</div>
+      ${rangeToggleHtml('calorie', progressView.calorieRange, ['7d', '1m'])}
       ${calChart}
       <div class="stat-grid">
         <div class="stat"><div class="stat-value">${Math.round(avgKcal7)} kcal</div><div class="stat-label">7-day avg calories</div></div>
@@ -1224,6 +1296,15 @@ progressRoot.addEventListener('click', (e) => {
     save(state);
     if (progressView.editingDate === btn.dataset.date) progressView.editingDate = null;
     renderProgress();
+  } else if (act === 'set-range') {
+    progressView[btn.dataset.target + 'Range'] = btn.dataset.range;
+    renderProgress();
+  }
+});
+
+progressRoot.addEventListener('input', (e) => {
+  if (e.target.id === 'ms-weight' || e.target.id === 'ms-waist') {
+    e.target.classList.remove('invalid');
   }
 });
 
@@ -1232,18 +1313,24 @@ progressRoot.addEventListener('submit', (e) => {
   if (e.target.id !== 'measurement-form') return;
 
   const date = document.getElementById('ms-date').value;
-  const weightRaw = document.getElementById('ms-weight').value;
-  const waistRaw = document.getElementById('ms-waist').value;
-  const hipsRaw = document.getElementById('ms-hips').value;
+  const weightInput = document.getElementById('ms-weight');
+  const waistInput = document.getElementById('ms-waist');
+  const weight = parseNum(weightInput.value);
+  const waist = parseNum(waistInput.value);
+  // weightInput.value === '' also fails this (parseNum('') is 0, a valid
+  // number) — check the raw string too, since 0 kg/cm is blank, not real.
+  const weightInvalid = weightInput.value.trim() === '' || Number.isNaN(weight);
+  const waistInvalid = waistInput.value.trim() === '' || Number.isNaN(waist);
   if (!date) return;
-  if (weightRaw === '' && waistRaw === '' && hipsRaw === '') return;
 
-  upsertMeasurement(state, {
-    date,
-    weight: weightRaw === '' ? null : Number(weightRaw),
-    waist: waistRaw === '' ? null : Number(waistRaw),
-    hips: hipsRaw === '' ? null : Number(hipsRaw),
-  });
+  weightInput.classList.toggle('invalid', weightInvalid);
+  waistInput.classList.toggle('invalid', waistInvalid);
+  if (weightInvalid || waistInvalid) {
+    (weightInvalid ? weightInput : waistInput).focus();
+    return;
+  }
+
+  upsertMeasurement(state, { date, weight, waist });
   save(state);
   progressView.editingDate = null;
   renderProgress();
@@ -1282,17 +1369,17 @@ function settingsFormHtml(s) {
   return `
     <form id="settings-form">
       <div class="row">
-        <div class="field"><label for="set-kcal-min">Calories min</label><input type="number" inputmode="decimal" id="set-kcal-min" value="${s.kcalMin}" required></div>
-        <div class="field"><label for="set-kcal-max">Calories max</label><input type="number" inputmode="decimal" id="set-kcal-max" value="${s.kcalMax}" required></div>
+        <div class="field"><label for="set-kcal-min">Calories min</label><input type="text" inputmode="decimal" id="set-kcal-min" value="${s.kcalMin}" required></div>
+        <div class="field"><label for="set-kcal-max">Calories max</label><input type="text" inputmode="decimal" id="set-kcal-max" value="${s.kcalMax}" required></div>
       </div>
       <div class="row">
-        <div class="field"><label for="set-protein-min">Protein min (g)</label><input type="number" inputmode="decimal" id="set-protein-min" value="${s.proteinMin}" required></div>
-        <div class="field"><label for="set-protein-max">Protein max (g)</label><input type="number" inputmode="decimal" id="set-protein-max" value="${s.proteinMax}" required></div>
+        <div class="field"><label for="set-protein-min">Protein min (g)</label><input type="text" inputmode="decimal" id="set-protein-min" value="${s.proteinMin}" required></div>
+        <div class="field"><label for="set-protein-max">Protein max (g)</label><input type="text" inputmode="decimal" id="set-protein-max" value="${s.proteinMax}" required></div>
       </div>
-      <div class="field"><label for="set-goal-weight">Goal weight (kg)</label><input type="number" inputmode="decimal" step="0.1" id="set-goal-weight" value="${s.goalWeight}" required></div>
+      <div class="field"><label for="set-goal-weight">Goal weight (kg)</label><input type="text" inputmode="decimal" id="set-goal-weight" value="${s.goalWeight}" required></div>
       <div class="row">
-        <div class="field"><label for="set-waist-min">Goal waist min (cm)</label><input type="number" inputmode="decimal" step="0.1" id="set-waist-min" value="${s.goalWaistMin}" required></div>
-        <div class="field"><label for="set-waist-max">Goal waist max (cm)</label><input type="number" inputmode="decimal" step="0.1" id="set-waist-max" value="${s.goalWaistMax}" required></div>
+        <div class="field"><label for="set-waist-min">Goal waist min (cm)</label><input type="text" inputmode="decimal" id="set-waist-min" value="${s.goalWaistMin}" required></div>
+        <div class="field"><label for="set-waist-max">Goal waist max (cm)</label><input type="text" inputmode="decimal" id="set-waist-max" value="${s.goalWaistMax}" required></div>
       </div>
       <button type="submit" class="btn btn-primary btn-block">Save settings</button>
       <div id="settings-status"></div>
@@ -1427,13 +1514,13 @@ planRoot.addEventListener('change', (e) => {
 planRoot.addEventListener('submit', (e) => {
   e.preventDefault();
   if (e.target.id !== 'settings-form') return;
-  const kcalMin = Number(document.getElementById('set-kcal-min').value);
-  const kcalMax = Number(document.getElementById('set-kcal-max').value);
-  const proteinMin = Number(document.getElementById('set-protein-min').value);
-  const proteinMax = Number(document.getElementById('set-protein-max').value);
-  const goalWeight = Number(document.getElementById('set-goal-weight').value);
-  const goalWaistMin = Number(document.getElementById('set-waist-min').value);
-  const goalWaistMax = Number(document.getElementById('set-waist-max').value);
+  const kcalMin = parseNum(document.getElementById('set-kcal-min').value);
+  const kcalMax = parseNum(document.getElementById('set-kcal-max').value);
+  const proteinMin = parseNum(document.getElementById('set-protein-min').value);
+  const proteinMax = parseNum(document.getElementById('set-protein-max').value);
+  const goalWeight = parseNum(document.getElementById('set-goal-weight').value);
+  const goalWaistMin = parseNum(document.getElementById('set-waist-min').value);
+  const goalWaistMax = parseNum(document.getElementById('set-waist-max').value);
   if ([kcalMin, kcalMax, proteinMin, proteinMax, goalWeight, goalWaistMin, goalWaistMax].some(Number.isNaN)) {
     setStatus('settings-status', 'Please fill in every field with a number.', true);
     return;
