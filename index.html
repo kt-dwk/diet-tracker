@@ -146,6 +146,16 @@
     min-height: 44px;
     width: 100%;
   }
+  /* iOS renders type="date" with its own native picker control that
+     historically ignores the page's width/padding rules that every other
+     input respects — this forces it back into the normal CSS box model
+     without removing the tap-to-open picker itself. */
+  .field input[type="date"] {
+    -webkit-appearance: none;
+    appearance: none;
+    box-sizing: border-box;
+    max-width: 100%;
+  }
   .checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 14px; margin-bottom: 12px; min-height: 44px; }
   .checkbox-row input { width: 20px; height: 20px; flex-shrink: 0; }
   .btn {
